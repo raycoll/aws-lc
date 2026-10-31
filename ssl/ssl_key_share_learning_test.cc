@@ -361,6 +361,32 @@ TEST(KeyShareLearningTest, UnsupportedLearnedGroupIgnored) {
   EXPECT_EQ(warm.group, SSL_GROUP_SECP384R1);
 }
 
+// A failed handshake teaches the client nothing. The session it leaves holds
+// the group from a ServerHello whose server was never authenticated, but no
+// learned group, and offering it leaves the default key shares.
+TEST(KeyShareLearningTest, FailedHandshakeNoLearning) {
+  UniquePtr<SSL_CTX> client_ctx = NewClientContext();
+  UniquePtr<SSL_CTX> server_ctx = NewServerContext({SSL_GROUP_SECP256R1});
+  ASSERT_TRUE(client_ctx);
+  ASSERT_TRUE(server_ctx);
+
+  ConnectOptions fail;
+  fail.reject_server_certificate = true;
+  Connection failed;
+  ASSERT_TRUE(Connect(&failed, client_ctx.get(), server_ctx.get(), fail));
+  EXPECT_TRUE(failed.hrr);
+  ASSERT_TRUE(failed.session);
+  EXPECT_EQ(failed.session->group_id, SSL_GROUP_SECP256R1);
+  EXPECT_EQ(SSL_SESSION_get_learned_group_id(failed.session.get()), 0);
+
+  ConnectOptions opts;
+  opts.session = failed.session.get();
+  Connection next;
+  ASSERT_TRUE(Connect(&next, client_ctx.get(), server_ctx.get(), opts));
+  EXPECT_EQ(next.first_key_shares, kDefaultShares);
+  EXPECT_TRUE(next.hrr);
+}
+
 }  // namespace
 
 BSSL_NAMESPACE_END
