@@ -2706,44 +2706,44 @@ OPENSSL_EXPORT size_t SSL_CTX_get_num_tickets(const SSL_CTX *ctx);
 // |SSL_SIGN_*|.
 
 // SSL_CTX_set1_groups sets the preferred groups for |ctx| to be |groups|. Each
-// element of |groups| should be a |NID_*| constant from nid.h. It returns one
-// on success and zero on failure.
+// element of |groups| should be a unique |NID_*| constant from nid.h. It
+// returns one on success and zero on failure.
 //
 // Note that this API does not use the |SSL_GROUP_*| values defined below.
 OPENSSL_EXPORT int SSL_CTX_set1_groups(SSL_CTX *ctx, const int *groups,
                                        size_t num_groups);
 
 // SSL_set1_groups sets the preferred groups for |ssl| to be |groups|. Each
-// element of |groups| should be a |NID_*| constant from nid.h. It returns one
-// on success and zero on failure.
+// element of |groups| should be a unique |NID_*| constant from nid.h. It
+// returns one on success and zero on failure.
 //
 // Note that this API does not use the |SSL_GROUP_*| values defined below.
 OPENSSL_EXPORT int SSL_set1_groups(SSL *ssl, const int *groups,
                                    size_t num_groups);
 
 // SSL_CTX_set1_group_ids sets the preferred groups for |ctx| to be
-// |group_ids|. Each element of |group_ids| should be a |SSL_GROUP_*| value. It
-// returns one on success and zero on failure.
+// |group_ids|. Each element of |group_ids| should be a unique |SSL_GROUP_*|
+// value. It returns one on success and zero on failure.
 OPENSSL_EXPORT int SSL_CTX_set1_group_ids(SSL_CTX *ctx,
                                           const uint16_t *group_ids,
                                           size_t num_group_ids);
 
 // SSL_set1_group_ids sets the preferred groups for |ssl| to be |group_ids|.
-// Each element of |group_ids| should be a |SSL_GROUP_*| value. It returns one
-// on success and zero on failure.
+// Each element of |group_ids| should be a unique |SSL_GROUP_*| value. It
+// returns one on success and zero on failure.
 OPENSSL_EXPORT int SSL_set1_group_ids(SSL *ssl, const uint16_t *group_ids,
                                       size_t num_group_ids);
 
 // SSL_CTX_set1_groups_list sets the preferred groups for |ctx| to be the
 // colon-separated list |groups|. Each element of |groups| should be a curve
-// name (e.g. P-256, X25519, ...). It returns one on success and zero on
-// failure.
+// name (e.g. P-256, X25519, ...). The list must not contain duplicates. It
+// returns one on success and zero on failure.
 OPENSSL_EXPORT int SSL_CTX_set1_groups_list(SSL_CTX *ctx, const char *groups);
 
 // SSL_set1_groups_list sets the preferred groups for |ssl| to be the
 // colon-separated list |groups|. Each element of |groups| should be a curve
-// name (e.g. P-256, X25519, ...). It returns one on success and zero on
-// failure.
+// name (e.g. P-256, X25519, ...). The list must not contain duplicates. It
+// returns one on success and zero on failure.
 OPENSSL_EXPORT int SSL_set1_groups_list(SSL *ssl, const char *groups);
 
 // SSL_get_negotiated_group returns the NID of the group used by |ssl|'s most

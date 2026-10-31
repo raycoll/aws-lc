@@ -2015,6 +2015,19 @@ int SSL_CTX_set_tlsext_ticket_key_cb(
   return 1;
 }
 
+// check_no_duplicates returns whether |list| has no repeated group.
+static bool check_no_duplicates(Span<const uint16_t> list) {
+  for (size_t i = 0; i < list.size(); i++) {
+    for (size_t j = 0; j < i; j++) {
+      if (list[i] == list[j]) {
+        OPENSSL_PUT_ERROR(SSL, SSL_R_DUPLICATE_KEY_SHARE);
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 static bool ssl_nids_to_group_ids(Array<uint16_t> *out_group_ids,
                                   Span<const int> nids) {
   Array<uint16_t> group_ids;
@@ -2026,6 +2039,9 @@ static bool ssl_nids_to_group_ids(Array<uint16_t> *out_group_ids,
     if (!ssl_nid_to_group_id(&group_ids[i], nids[i])) {
       return false;
     }
+  }
+  if (!check_no_duplicates(group_ids)) {
+    return false;
   }
 
   *out_group_ids = std::move(group_ids);
@@ -2052,15 +2068,8 @@ static bool ssl_check_group_ids(Array<uint16_t> *out_group_ids,
       OPENSSL_PUT_ERROR(SSL, SSL_R_UNSUPPORTED_ELLIPTIC_CURVE);
       return false;
     }
-    // Reject duplicate group IDs
-    for (size_t j = 0; j < i; j++) {
-      if (group_ids[i] == group_ids[j]) {
-        OPENSSL_PUT_ERROR(SSL, SSL_R_DUPLICATE_KEY_SHARE);
-        return false;
-      }
-    }
   }
-  return out_group_ids->CopyFrom(group_ids);
+  return check_no_duplicates(group_ids) && out_group_ids->CopyFrom(group_ids);
 }
 
 int SSL_CTX_set1_group_ids(SSL_CTX *ctx, const uint16_t *group_ids,
@@ -2110,6 +2119,9 @@ static bool ssl_str_to_group_ids(Array<uint16_t> *out_group_ids,
   } while (col);
 
   assert(i == count);
+  if (!check_no_duplicates(group_ids)) {
+    return false;
+  }
   *out_group_ids = std::move(group_ids);
   return true;
 }
