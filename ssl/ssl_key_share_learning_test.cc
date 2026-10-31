@@ -262,6 +262,45 @@ TEST(KeyShareLearningTest, LearnedGroupAvoidsHelloRetryRequest) {
   }
 }
 
+// Without key share learning, a client records no group and predicts none,
+// and resumption works as before. A client that has learning off ignores a
+// group another client learned.
+TEST(KeyShareLearningTest, DisabledByDefault) {
+  UniquePtr<SSL_CTX> client_ctx = NewClientContext();
+  UniquePtr<SSL_CTX> server_ctx = NewServerContext({SSL_GROUP_SECP256R1});
+  ASSERT_TRUE(client_ctx);
+  ASSERT_TRUE(server_ctx);
+
+  UniquePtr<SSL_CTX> default_ctx(SSL_CTX_new(TLS_method()));
+  ASSERT_TRUE(default_ctx);
+  ASSERT_TRUE(SSL_CTX_set1_group_ids(default_ctx.get(), kClientGroups.data(),
+                                     kClientGroups.size()));
+  SSL_CTX_set_session_cache_mode(default_ctx.get(), SSL_SESS_CACHE_CLIENT);
+  Connection off;
+  ASSERT_TRUE(Connect(&off, default_ctx.get(), server_ctx.get()));
+  ASSERT_TRUE(off.ticket);
+  EXPECT_EQ(SSL_SESSION_get_learned_group_id(off.ticket.get()), 0);
+  ConnectOptions resume;
+  resume.session = off.ticket.get();
+  Connection off_again;
+  ASSERT_TRUE(Connect(&off_again, default_ctx.get(), server_ctx.get(), resume));
+  EXPECT_EQ(off_again.first_key_shares, kDefaultShares);
+  EXPECT_TRUE(off_again.hrr);
+  EXPECT_TRUE(off_again.reused);
+
+  Connection learned;
+  ASSERT_TRUE(Connect(&learned, client_ctx.get(), server_ctx.get()));
+  ASSERT_TRUE(learned.ticket);
+  ConnectOptions turned_off;
+  turned_off.session = learned.ticket.get();
+  turned_off.learning_disabled = true;
+  Connection ignored;
+  ASSERT_TRUE(
+      Connect(&ignored, client_ctx.get(), server_ctx.get(), turned_off));
+  EXPECT_EQ(ignored.first_key_shares, kDefaultShares);
+  EXPECT_TRUE(ignored.hrr);
+}
+
 }  // namespace
 
 BSSL_NAMESPACE_END
