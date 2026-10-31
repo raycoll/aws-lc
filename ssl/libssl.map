@@ -487,6 +487,7 @@ AWS_LC_1.0 {
     SSL_set0_verify_cert_store;
     SSL_set0_wbio;
     SSL_set1_chain;
+    SSL_set1_client_key_shares;
     SSL_set1_curves;
     SSL_set1_curves_list;
     SSL_set1_delegated_credential;

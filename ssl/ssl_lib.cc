@@ -2048,6 +2048,49 @@ static bool ssl_nids_to_group_ids(Array<uint16_t> *out_group_ids,
   return true;
 }
 
+// ssl_config_grouplist returns the supported groups |config| offers: its own
+// list, or the default list if none was configured.
+static Span<const uint16_t> ssl_config_grouplist(const SSL_CONFIG *config) {
+  if (!config->supported_group_list.empty()) {
+    return config->supported_group_list;
+  }
+  return tls1_get_default_grouplist();
+}
+
+// validate_key_shares returns whether the |requested_key_shares| are free of
+// duplicates and are a (correctly ordered) subsequence of the supported
+// |groups|.
+static bool validate_key_shares(Span<const uint16_t> requested_key_shares,
+                                Span<const uint16_t> groups) {
+  if (!check_no_duplicates(requested_key_shares)) {
+    return false;
+  }
+  if (requested_key_shares.size() > groups.size()) {
+    return false;
+  }
+  size_t key_shares_idx = 0u, groups_idx = 0u;
+  while (key_shares_idx < requested_key_shares.size() &&
+         groups_idx < groups.size()) {
+    if (requested_key_shares[key_shares_idx] == groups[groups_idx++]) {
+      ++key_shares_idx;
+    }
+  }
+  return key_shares_idx == requested_key_shares.size();
+}
+
+static void clear_key_shares_if_invalid(SSL_CONFIG *config) {
+  if (!config->has_client_key_share_selections) {
+    return;
+  }
+  if (!validate_key_shares(
+          MakeConstSpan(config->client_key_share_selections.data(),
+                        config->client_key_share_selections.size()),
+          ssl_config_grouplist(config))) {
+    config->has_client_key_share_selections = false;
+    config->client_key_share_selections.clear();
+  }
+}
+
 int SSL_CTX_set1_groups(SSL_CTX *ctx, const int *groups, size_t num_groups) {
   return ssl_nids_to_group_ids(&ctx->supported_group_list,
                                MakeConstSpan(groups, num_groups));
@@ -2057,8 +2100,12 @@ int SSL_set1_groups(SSL *ssl, const int *groups, size_t num_groups) {
   if (!ssl->config) {
     return 0;
   }
-  return ssl_nids_to_group_ids(&ssl->config->supported_group_list,
-                               MakeConstSpan(groups, num_groups));
+  if (ssl_nids_to_group_ids(&ssl->config->supported_group_list,
+                            MakeConstSpan(groups, num_groups))) {
+    clear_key_shares_if_invalid(ssl->config.get());
+    return 1;
+  }
+  return 0;
 }
 
 static bool ssl_check_group_ids(Array<uint16_t> *out_group_ids,
@@ -2083,8 +2130,12 @@ int SSL_set1_group_ids(SSL *ssl, const uint16_t *group_ids,
   if (!ssl->config) {
     return 0;
   }
-  return ssl_check_group_ids(&ssl->config->supported_group_list,
-                             MakeConstSpan(group_ids, num_group_ids));
+  if (ssl_check_group_ids(&ssl->config->supported_group_list,
+                          MakeConstSpan(group_ids, num_group_ids))) {
+    clear_key_shares_if_invalid(ssl->config.get());
+    return 1;
+  }
+  return 0;
 }
 
 static bool ssl_str_to_group_ids(Array<uint16_t> *out_group_ids,
@@ -2134,7 +2185,11 @@ int SSL_set1_groups_list(SSL *ssl, const char *groups) {
   if (!ssl->config) {
     return 0;
   }
-  return ssl_str_to_group_ids(&ssl->config->supported_group_list, groups);
+  if (ssl_str_to_group_ids(&ssl->config->supported_group_list, groups)) {
+    clear_key_shares_if_invalid(ssl->config.get());
+    return 1;
+  }
+  return 0;
 }
 
 uint16_t SSL_get_group_id(const SSL *ssl) {
@@ -2144,6 +2199,27 @@ uint16_t SSL_get_group_id(const SSL *ssl) {
   }
 
   return session->group_id;
+}
+
+int SSL_set1_client_key_shares(SSL *ssl, const uint16_t *group_ids,
+                               size_t num_group_ids) {
+  if (!ssl->config) {
+    return 0;
+  }
+  Span<const uint16_t> requested_key_shares =
+      MakeConstSpan(group_ids, num_group_ids);
+  if (!validate_key_shares(requested_key_shares,
+                           ssl_config_grouplist(ssl->config.get()))) {
+    return 0;
+  }
+
+  assert(requested_key_shares.size() <= kNumNamedGroups);
+  if (!ssl->config->client_key_share_selections.TryCopyFrom(
+          requested_key_shares)) {
+    return 0;
+  }
+  ssl->config->has_client_key_share_selections = true;
+  return 1;
 }
 
 int SSL_get_negotiated_group(const SSL *ssl) {

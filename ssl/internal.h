@@ -2036,9 +2036,7 @@ struct SSL_HANDSHAKE {
   UniquePtr<ERR_SAVE_STATE> error;
 
   // key_shares are the current key exchange instances, in preference order. Any
-  // members of this vector must be non-null. By default, no more than two are
-  // used, and the second is only used as a client if we believe that we should
-  // offer two key shares in a ClientHello.
+  // members of this vector must be non-null.
   InplaceVector<UniquePtr<SSLKeyShare>, kNumNamedGroups> key_shares;
 
   // transcript is the current handshake transcript.
@@ -2352,9 +2350,19 @@ bssl::UniquePtr<SSL_SESSION> tls13_create_session_with_ticket(SSL *ssl,
 bool ssl_setup_extension_permutation(SSL_HANDSHAKE *hs);
 
 // ssl_setup_key_shares computes client key shares and saves them in |hs|. It
-// returns true on success and false on failure. If |override_group_id| is zero,
-// it offers the default groups, including GREASE. If it is non-zero, it offers
-// a single key share of the specified group.
+// returns true on success and false on failure. In order of precedence:
+//
+// - If |override_group_id| is non-zero, it offers a single key share of the
+//   specified group.
+//
+// - If key shares were previously specified by the caller via
+//   |SSL_set1_client_key_shares|, those are used.
+//
+// - If |override_group_id| is zero and no selections were made by the caller
+//   via |SSL_set1_client_key_shares|, it selects the first supported group and
+//   may select a second if at most one of the two is a post-quantum group.
+//
+// GREASE will be included if enabled, when |override_group_id| is zero.
 bool ssl_setup_key_shares(SSL_HANDSHAKE *hs, uint16_t override_group_id);
 
 bool ssl_ext_key_share_parse_serverhello(SSL_HANDSHAKE *hs,
@@ -3333,7 +3341,24 @@ struct SSL_CONFIG {
   // |client_CA|.
   STACK_OF(X509_NAME) *cached_x509_client_CA = nullptr;
 
-  Array<uint16_t> supported_group_list;  // our list
+  // Our list of supported groups. If this list is modified, for a client,
+  // |client_key_share_selections| must be reset if the key shares are no longer
+  // a valid subsequence of the supported group list.
+  Array<uint16_t> supported_group_list;
+
+  // For a client, this may contain a subsequence of the group IDs in
+  // |supported_group_list| (or the default group list, if that is empty),
+  // which gives the groups for which key shares should be sent in the client's
+  // key_share extension. It is meaningful iff
+  // |has_client_key_share_selections| is true, which is the case iff
+  // |SSL_set1_client_key_shares| was successfully called to configure key
+  // shares. These groups are in the same order as they appear in the supported
+  // group list, and may not contain duplicates.
+  //
+  // BoringSSL stores these as a std::optional; AWS-LC builds as C++11, so the
+  // flag stands in for it.
+  bool has_client_key_share_selections = false;
+  InplaceVector<uint16_t, kNumNamedGroups> client_key_share_selections;
 
   // channel_id_private is the client's Channel ID private key, or null if
   // Channel ID should not be offered on this connection.

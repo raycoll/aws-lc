@@ -480,6 +480,7 @@ SSL_set0_security_ex_data AWS_LC_1.0 PUBLIC
 SSL_set0_verify_cert_store AWS_LC_1.0 PUBLIC
 SSL_set0_wbio AWS_LC_1.0 PUBLIC
 SSL_set1_chain AWS_LC_1.0 PUBLIC
+SSL_set1_client_key_shares AWS_LC_1.0 PUBLIC
 SSL_set1_curves AWS_LC_1.0 PUBLIC
 SSL_set1_curves_list AWS_LC_1.0 PUBLIC
 SSL_set1_delegated_credential AWS_LC_1.0 PUBLIC
