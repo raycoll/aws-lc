@@ -387,6 +387,34 @@ TEST(KeyShareLearningTest, FailedHandshakeNoLearning) {
   EXPECT_TRUE(next.hrr);
 }
 
+// An expired session predicts nothing, and the handshake that replaces it
+// learns the group again.
+TEST(KeyShareLearningTest, ExpiredSessionNoLearning) {
+  UniquePtr<SSL_CTX> client_ctx = NewClientContext();
+  UniquePtr<SSL_CTX> server_ctx = NewServerContext({SSL_GROUP_SECP256R1});
+  ASSERT_TRUE(client_ctx);
+  ASSERT_TRUE(server_ctx);
+  Connection cold;
+  ASSERT_TRUE(Connect(&cold, client_ctx.get(), server_ctx.get()));
+  ASSERT_TRUE(cold.ticket);
+  ASSERT_TRUE(cold.session);
+
+  for (SSL_SESSION *session : {cold.ticket.get(), cold.session.get()}) {
+    SCOPED_TRACE(session == cold.ticket.get() ? "ticket" : "session");
+    SSL_SESSION_set_time(session, 1);
+    SSL_SESSION_set_timeout(session, 1);
+    ConnectOptions opts;
+    opts.session = session;
+    Connection warm;
+    ASSERT_TRUE(Connect(&warm, client_ctx.get(), server_ctx.get(), opts));
+    EXPECT_EQ(warm.first_key_shares, kDefaultShares);
+    EXPECT_TRUE(warm.hrr);
+    ASSERT_TRUE(warm.ticket);
+    EXPECT_EQ(SSL_SESSION_get_learned_group_id(warm.ticket.get()),
+              SSL_GROUP_SECP256R1);
+  }
+}
+
 }  // namespace
 
 BSSL_NAMESPACE_END
