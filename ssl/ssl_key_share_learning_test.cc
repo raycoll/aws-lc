@@ -550,6 +550,30 @@ TEST(KeyShareLearningTest, NoLearningUnderECH) {
   EXPECT_EQ(warm.first_key_shares, kDefaultShares);
 }
 
+// A learned group takes precedence over key shares configured with
+// |SSL_set1_client_key_shares|, which still apply when there is nothing
+// learned.
+TEST(KeyShareLearningTest, LearnedGroupOverridesConfiguredKeyShares) {
+  UniquePtr<SSL_CTX> client_ctx = NewClientContext();
+  UniquePtr<SSL_CTX> server_ctx = NewServerContext({SSL_GROUP_SECP256R1});
+  ASSERT_TRUE(client_ctx);
+  ASSERT_TRUE(server_ctx);
+  Connection cold;
+  ASSERT_TRUE(Connect(&cold, client_ctx.get(), server_ctx.get()));
+  ASSERT_TRUE(cold.ticket);
+
+  for (SSL_SESSION *session : {cold.ticket.get(), (SSL_SESSION *)nullptr}) {
+    SCOPED_TRACE(session ? "with a learned group" : "without");
+    ConnectOptions opts;
+    opts.session = session;
+    opts.has_key_shares = true;
+    opts.key_shares = {SSL_GROUP_SECP384R1};
+    Connection conn;
+    ASSERT_TRUE(Connect(&conn, client_ctx.get(), server_ctx.get(), opts));
+    EXPECT_EQ(conn.first_key_shares, session ? kP256Share : kP384Share);
+  }
+}
+
 }  // namespace
 
 BSSL_NAMESPACE_END
