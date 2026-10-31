@@ -301,6 +301,40 @@ TEST(KeyShareLearningTest, DisabledByDefault) {
   EXPECT_TRUE(ignored.hrr);
 }
 
+// A server that issues no tickets still teaches the client its group. The
+// session from |SSL_get1_session| is not resumable but carries the group, and
+// offering it changes the key share, not resumption.
+TEST(KeyShareLearningTest, ServerWithoutTicketsTeachesGroup) {
+  UniquePtr<SSL_CTX> client_ctx = NewClientContext();
+  UniquePtr<SSL_CTX> server_ctx = NewServerContext({SSL_GROUP_SECP256R1});
+  ASSERT_TRUE(client_ctx);
+  ASSERT_TRUE(server_ctx);
+  SSL_CTX_set_options(server_ctx.get(), SSL_OP_NO_TICKET);
+
+  Connection cold;
+  ASSERT_TRUE(Connect(&cold, client_ctx.get(), server_ctx.get()));
+  EXPECT_FALSE(cold.ticket);
+  ASSERT_TRUE(cold.session);
+  EXPECT_FALSE(SSL_SESSION_is_resumable(cold.session.get()));
+  EXPECT_EQ(SSL_SESSION_get_learned_group_id(cold.session.get()),
+            SSL_GROUP_SECP256R1);
+
+  UniquePtr<SSL_SESSION> decoded =
+      RoundTrip(cold.session.get(), client_ctx.get());
+  ASSERT_TRUE(decoded);
+  for (SSL_SESSION *session : {cold.session.get(), decoded.get()}) {
+    SCOPED_TRACE(session == decoded.get() ? "decoded" : "session");
+    ConnectOptions opts;
+    opts.session = session;
+    Connection warm;
+    ASSERT_TRUE(Connect(&warm, client_ctx.get(), server_ctx.get(), opts));
+    EXPECT_EQ(warm.first_key_shares, kP256Share);
+    EXPECT_FALSE(warm.hrr);
+    EXPECT_FALSE(warm.reused);
+    EXPECT_EQ(warm.group, SSL_GROUP_SECP256R1);
+  }
+}
+
 }  // namespace
 
 BSSL_NAMESPACE_END
