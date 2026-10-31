@@ -113,6 +113,7 @@ if(BUILD_TESTING)
     ssl_c_test.c
     ssl_key_share_test.cc
     ssl_client_key_shares_test.cc
+    ssl_key_share_learning_test.cc
     ssl_alps_test.cc
     ssl_common_test.cc
     ssl_misc_test.cc
