@@ -193,6 +193,30 @@ static const char kBadSessionTrailingData[] =
     "q+Topyzvx9USFgRvyuoxn0Hgb+R0A3j6SLRuyOdAi4gv7Y5oliynrSIEIAYGBgYG"
     "BgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGrgMEAQevAwQBBLADBAEFAAAA";
 
+// kLearnedGroupSession is |kCustomSession| with a learned group, P-256, in
+// learnedGroupID [64].
+static const char kLearnedGroupSession[] =
+    "MIIBagIBAQICAwMEAsAvBCAG5Q1ndq4Yfmbeo1zwLkNRKmCXGdNgWvGT3cskV0yQ"
+    "kAQwJlrlzkAWBOWiLj/jJ76D7l+UXoizP2KI2C7I2FccqMmIfFmmkUy32nIJ0mZH"
+    "IWoJoQYCBFRDO46iBAICASykAwQBAqUDAgEUqAcEBXdvcmxkqQUCAwGJwKqBpwSB"
+    "pBwUQvoeOk0Kg36SYTcLEkXqKwOBfF9vE4KX0NxeLwjcDTpsuh3qXEaZ992r1N38"
+    "VDcyS6P7I6HBYN9BsNHM362zZnY27GpTw+Kwd751CLoXFPoaMOe57dbBpXoro6Pd"
+    "3BTbf/Tzr88K06yEOTDKPNj3+inbMaVigtK4PLyPq+Topyzvx9USFgRvyuoxn0Hg"
+    "b+R0A3j6SLRuyOdAi4gv7Y5oliynrSIEIAYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG"
+    "BgYGBgYGBgYGrgMEAQevAwQBBLADBAEFv0ADAgEX";
+
+// kBadSessionLearnedGroup is |kCustomSession| with a learnedGroupID [64] that
+// does not fit in 16 bits.
+static const char kBadSessionLearnedGroup[] =
+    "MIIBbAIBAQICAwMEAsAvBCAG5Q1ndq4Yfmbeo1zwLkNRKmCXGdNgWvGT3cskV0yQ"
+    "kAQwJlrlzkAWBOWiLj/jJ76D7l+UXoizP2KI2C7I2FccqMmIfFmmkUy32nIJ0mZH"
+    "IWoJoQYCBFRDO46iBAICASykAwQBAqUDAgEUqAcEBXdvcmxkqQUCAwGJwKqBpwSB"
+    "pBwUQvoeOk0Kg36SYTcLEkXqKwOBfF9vE4KX0NxeLwjcDTpsuh3qXEaZ992r1N38"
+    "VDcyS6P7I6HBYN9BsNHM362zZnY27GpTw+Kwd751CLoXFPoaMOe57dbBpXoro6Pd"
+    "3BTbf/Tzr88K06yEOTDKPNj3+inbMaVigtK4PLyPq+Topyzvx9USFgRvyuoxn0Hg"
+    "b+R0A3j6SLRuyOdAi4gv7Y5oliynrSIEIAYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG"
+    "BgYGBgYGBgYGrgMEAQevAwQBBLADBAEFv0AFAgMBAAA=";
+
 static bool DecodeBase64(std::vector<uint8_t> *out, const char *in) {
   size_t len = 0;
   if (!EVP_DecodedLength(&len, strlen(in))) {
@@ -215,6 +239,7 @@ TEST(SSLTest, SessionEncoding) {
            kOpenSSLSession,
            kCustomSession,
            kBoringSSLSession,
+           kLearnedGroupSession,
        }) {
     SCOPED_TRACE(std::string(input_b64));
     // Decode the input.
@@ -279,6 +304,7 @@ TEST(SSLTest, SessionEncoding) {
            kBadSessionExtraField,
            kBadSessionVersion,
            kBadSessionTrailingData,
+           kBadSessionLearnedGroup,
        }) {
     SCOPED_TRACE(std::string(input_b64));
     std::vector<uint8_t> input;
