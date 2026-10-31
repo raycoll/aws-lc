@@ -449,6 +449,36 @@ TEST(KeyShareLearningTest, ResumptionLeavesOfferedSessionAlone) {
             SSL_GROUP_SECP384R1);
 }
 
+// When the server changes its group, the stale prediction costs one
+// HelloRetryRequest, and the next connection predicts the new group.
+TEST(KeyShareLearningTest, StaleGroupRelearned) {
+  UniquePtr<SSL_CTX> client_ctx = NewClientContext();
+  UniquePtr<SSL_CTX> server_ctx = NewServerContext({SSL_GROUP_SECP256R1});
+  ASSERT_TRUE(client_ctx);
+  ASSERT_TRUE(server_ctx);
+  Connection cold;
+  ASSERT_TRUE(Connect(&cold, client_ctx.get(), server_ctx.get()));
+  ASSERT_TRUE(cold.ticket);
+
+  const uint16_t kP384 = SSL_GROUP_SECP384R1;
+  ASSERT_TRUE(SSL_CTX_set1_group_ids(server_ctx.get(), &kP384, 1));
+  ConnectOptions opts;
+  opts.session = cold.ticket.get();
+  Connection changed;
+  ASSERT_TRUE(Connect(&changed, client_ctx.get(), server_ctx.get(), opts));
+  EXPECT_EQ(changed.first_key_shares, kP256Share);
+  EXPECT_TRUE(changed.hrr);
+  EXPECT_EQ(changed.group, SSL_GROUP_SECP384R1);
+  ASSERT_TRUE(changed.ticket);
+
+  opts.session = changed.ticket.get();
+  Connection relearned;
+  ASSERT_TRUE(Connect(&relearned, client_ctx.get(), server_ctx.get(), opts));
+  EXPECT_EQ(relearned.first_key_shares, kP384Share);
+  EXPECT_FALSE(relearned.hrr);
+  EXPECT_EQ(relearned.group, SSL_GROUP_SECP384R1);
+}
+
 }  // namespace
 
 BSSL_NAMESPACE_END
