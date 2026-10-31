@@ -335,6 +335,32 @@ TEST(KeyShareLearningTest, ServerWithoutTicketsTeachesGroup) {
   }
 }
 
+// A learned group the client no longer supports is ignored, and the default
+// key shares are sent.
+TEST(KeyShareLearningTest, UnsupportedLearnedGroupIgnored) {
+  UniquePtr<SSL_CTX> client_ctx = NewClientContext();
+  // P-256 by the client's order and by the server's.
+  UniquePtr<SSL_CTX> server_ctx =
+      NewServerContext({SSL_GROUP_SECP256R1, SSL_GROUP_SECP384R1});
+  ASSERT_TRUE(client_ctx);
+  ASSERT_TRUE(server_ctx);
+  Connection cold;
+  ASSERT_TRUE(Connect(&cold, client_ctx.get(), server_ctx.get()));
+  ASSERT_TRUE(cold.ticket);
+  EXPECT_EQ(SSL_SESSION_get_learned_group_id(cold.ticket.get()),
+            SSL_GROUP_SECP256R1);
+
+  ConnectOptions opts;
+  opts.session = cold.ticket.get();
+  opts.client_groups = {SSL_GROUP_X25519_MLKEM768, SSL_GROUP_X25519,
+                        SSL_GROUP_SECP384R1};
+  Connection warm;
+  ASSERT_TRUE(Connect(&warm, client_ctx.get(), server_ctx.get(), opts));
+  EXPECT_EQ(warm.first_key_shares, kDefaultShares);
+  EXPECT_TRUE(warm.hrr);
+  EXPECT_EQ(warm.group, SSL_GROUP_SECP384R1);
+}
+
 }  // namespace
 
 BSSL_NAMESPACE_END
