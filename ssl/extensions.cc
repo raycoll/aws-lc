@@ -2173,8 +2173,7 @@ static bool ext_early_data_add_serverhello(SSL_HANDSHAKE *hs, CBB *out) {
 
 bool ssl_setup_key_shares(SSL_HANDSHAKE *hs, uint16_t override_group_id) {
   SSL *const ssl = hs->ssl;
-  hs->key_shares[0].reset();
-  hs->key_shares[1].reset();
+  hs->key_shares.clear();
   hs->key_share_bytes.Reset();
 
   if (hs->max_version < TLS1_3_VERSION) {
@@ -2218,20 +2217,22 @@ bool ssl_setup_key_shares(SSL_HANDSHAKE *hs, uint16_t override_group_id) {
   }
 
   CBB key_exchange;
-  hs->key_shares[0] = SSLKeyShare::Create(group_id);
-  if (!hs->key_shares[0] ||  //
-      !CBB_add_u16(cbb.get(), group_id) ||
-      !CBB_add_u16_length_prefixed(cbb.get(), &key_exchange) ||
-      !hs->key_shares[0]->Offer(&key_exchange)) {
-    return false;
+  {
+    UniquePtr<SSLKeyShare> key_share = SSLKeyShare::Create(group_id);
+    if (key_share == nullptr || !CBB_add_u16(cbb.get(), group_id) ||
+        !CBB_add_u16_length_prefixed(cbb.get(), &key_exchange) ||
+        !key_share->Offer(&key_exchange) ||
+        !hs->key_shares.TryPushBack(std::move(key_share))) {
+      return false;
+    }
   }
 
   if (second_group_id != 0) {
-    hs->key_shares[1] = SSLKeyShare::Create(second_group_id);
-    if (!hs->key_shares[1] ||  //
-        !CBB_add_u16(cbb.get(), second_group_id) ||
+    UniquePtr<SSLKeyShare> key_share = SSLKeyShare::Create(second_group_id);
+    if (key_share == nullptr || !CBB_add_u16(cbb.get(), second_group_id) ||
         !CBB_add_u16_length_prefixed(cbb.get(), &key_exchange) ||
-        !hs->key_shares[1]->Offer(&key_exchange)) {
+        !key_share->Offer(&key_exchange) ||
+        !hs->key_shares.TryPushBack(std::move(key_share))) {
       return false;
     }
   }
@@ -2274,15 +2275,17 @@ bool ssl_ext_key_share_parse_serverhello(SSL_HANDSHAKE *hs,
     return false;
   }
 
-  SSLKeyShare *key_share = hs->key_shares[0].get();
-  if (key_share->GroupID() != group_id) {
-    if (!hs->key_shares[1] || hs->key_shares[1]->GroupID() != group_id) {
-      *out_alert = SSL_AD_ILLEGAL_PARAMETER;
-      OPENSSL_PUT_ERROR(SSL, SSL_R_WRONG_CURVE);
-      return false;
-    }
-    key_share = hs->key_shares[1].get();
+  const UniquePtr<SSLKeyShare> *key_share_it =
+      std::find_if(hs->key_shares.begin(), hs->key_shares.end(),
+                   [group_id](const UniquePtr<SSLKeyShare> &key_share) {
+                     return key_share->GroupID() == group_id;
+                   });
+  if (key_share_it == hs->key_shares.end()) {
+    *out_alert = SSL_AD_ILLEGAL_PARAMETER;
+    OPENSSL_PUT_ERROR(SSL, SSL_R_WRONG_CURVE);
+    return false;
   }
+  SSLKeyShare *key_share = key_share_it->get();
 
   if (!key_share->Finish(out_secret, out_alert, peer_key) ||
       // Save peer's public key for observation with |SSL_get_peer_tmp_key|.
@@ -2292,8 +2295,7 @@ bool ssl_ext_key_share_parse_serverhello(SSL_HANDSHAKE *hs,
   }
 
   hs->new_session->group_id = group_id;
-  hs->key_shares[0].reset();
-  hs->key_shares[1].reset();
+  hs->key_shares.clear();
   return true;
 }
 

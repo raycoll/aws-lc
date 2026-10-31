@@ -7,6 +7,7 @@
 #include <limits.h>
 #include <string.h>
 
+#include <algorithm>
 #include <utility>
 
 #include <openssl/bytestring.h>
@@ -278,8 +279,10 @@ static enum ssl_hs_wait_t do_read_hello_retry_request(SSL_HANDSHAKE *hs) {
 
     // Check that the HelloRetryRequest does not request a key share that was
     // provided in the initial ClientHello.
-    if (hs->key_shares[0]->GroupID() == group_id ||
-        (hs->key_shares[1] && hs->key_shares[1]->GroupID() == group_id)) {
+    if (std::find_if(hs->key_shares.begin(), hs->key_shares.end(),
+                     [group_id](const UniquePtr<SSLKeyShare> &hs_key_share) {
+                       return hs_key_share->GroupID() == group_id;
+                     }) != hs->key_shares.end()) {
       ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_ILLEGAL_PARAMETER);
       OPENSSL_PUT_ERROR(SSL, SSL_R_WRONG_CURVE);
       return ssl_hs_error;

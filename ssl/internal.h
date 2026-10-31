@@ -347,6 +347,85 @@ class GrowableArray {
   static constexpr size_t kDefaultSize = 16;
 };
 
+// An InplaceVector is like a vector, but stores up to N elements inline in the
+// object. It is inspired by std::inplace_vector in C++26.
+//
+// This is a C++11 port of the subset of BoringSSL's InplaceVector that
+// |SSL_HANDSHAKE::key_shares| and |SSL_CONFIG::client_key_share_selections|
+// use. Method names follow BoringSSL so that later imports apply cleanly.
+template <typename T, size_t N>
+class InplaceVector {
+ public:
+  using value_type = typename std::remove_cv<T>::type;
+
+  InplaceVector() = default;
+  InplaceVector(const InplaceVector &) = delete;
+  InplaceVector &operator=(const InplaceVector &) = delete;
+  ~InplaceVector() { clear(); }
+
+  const T *data() const { return reinterpret_cast<const T *>(storage_); }
+  T *data() { return reinterpret_cast<T *>(storage_); }
+  size_t size() const { return size_; }
+  static constexpr size_t capacity() { return N; }
+  bool empty() const { return size_ == 0; }
+
+  const T &operator[](size_t i) const {
+    BSSL_CHECK(i < size_);
+    return data()[i];
+  }
+  T &operator[](size_t i) {
+    BSSL_CHECK(i < size_);
+    return data()[i];
+  }
+
+  T *begin() { return data(); }
+  const T *begin() const { return data(); }
+  T *end() { return data() + size_; }
+  const T *end() const { return data() + size_; }
+
+  void clear() { Shrink(0); }
+
+  // Shrink resizes the vector to |new_size|, which must not be larger than the
+  // current size.
+  void Shrink(size_t new_size) {
+    BSSL_CHECK(new_size <= size_);
+    for (size_t i = new_size; i < size_; i++) {
+      data()[i].~T();
+    }
+    size_ = new_size;
+  }
+
+  // TryCopyFrom sets the vector to a copy of |in| and returns true, or returns
+  // false if |in| is too large. |in| may not alias |this|.
+  bool TryCopyFrom(Span<const T> in) {
+    if (in.size() > capacity()) {
+      return false;
+    }
+    clear();
+    for (const T &v : in) {
+      new (&data()[size_]) T(v);
+      size_++;
+    }
+    return true;
+  }
+
+  // TryPushBack appends |val| to the vector and returns a pointer to the
+  // newly-inserted value, or nullptr if the vector is at capacity.
+  T *TryPushBack(T val) {
+    if (size() >= capacity()) {
+      return nullptr;
+    }
+    T *ret = &data()[size_];
+    new (ret) T(std::move(val));
+    size_++;
+    return ret;
+  }
+
+ private:
+  alignas(T) char storage_[sizeof(T[N])];
+  size_t size_ = 0;
+};
+
 // CBBFinishArray behaves like |CBB_finish| but stores the result in an Array.
 OPENSSL_EXPORT bool CBBFinishArray(CBB *cbb, Array<uint8_t> *out);
 
@@ -1158,6 +1237,9 @@ struct NamedGroup {
   const char name[32], alias[32];
 };
 
+// kNumNamedGroups is the number of supported groups.
+constexpr size_t kNumNamedGroups = 11u;
+
 // NamedGroups returns all supported groups.
 Span<const NamedGroup> NamedGroups();
 
@@ -1953,10 +2035,11 @@ struct SSL_HANDSHAKE {
   // error, if |wait| is |ssl_hs_error|, is the error the handshake failed on.
   UniquePtr<ERR_SAVE_STATE> error;
 
-  // key_shares are the current key exchange instances. The second is only used
-  // as a client if we believe that we should offer two key shares in a
-  // ClientHello.
-  UniquePtr<SSLKeyShare> key_shares[2];
+  // key_shares are the current key exchange instances, in preference order. Any
+  // members of this vector must be non-null. By default, no more than two are
+  // used, and the second is only used as a client if we believe that we should
+  // offer two key shares in a ClientHello.
+  InplaceVector<UniquePtr<SSLKeyShare>, kNumNamedGroups> key_shares;
 
   // transcript is the current handshake transcript.
   SSLTranscript transcript;

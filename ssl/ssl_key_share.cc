@@ -684,6 +684,9 @@ CONSTEXPR_ARRAY NamedGroup kNamedGroups[] = {
     {NID_MLKEM1024, SSL_GROUP_MLKEM1024, "MLKEM1024", "ML-KEM-1024"},
 };
 
+static_assert(OPENSSL_ARRAY_SIZE(kNamedGroups) == kNumNamedGroups,
+              "kNamedGroups size mismatch");
+
 CONSTEXPR_ARRAY uint16_t kPQGroups[] = {
     SSL_GROUP_MLKEM512,
     SSL_GROUP_MLKEM768,
