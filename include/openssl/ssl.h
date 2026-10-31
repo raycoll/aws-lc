@@ -2909,6 +2909,56 @@ OPENSSL_EXPORT SSL *SSL_from_bytes(const uint8_t *in, size_t in_len,
 OPENSSL_EXPORT size_t SSL_get_all_group_names(const char **out, size_t max_out);
 
 
+// Key share learning.
+//
+// With key share learning, a client that completes a TLS 1.3 handshake
+// records the negotiated group in the session. A client later given that
+// session with |SSL_set_session| sends a single key share, for that group,
+// instead of the key shares it would otherwise send. A server whose choice of
+// group does not depend on the client's key shares will then usually complete
+// the handshake without a HelloRetryRequest. If the server picks another
+// group, the handshake costs one HelloRetryRequest, and the sessions from that
+// handshake carry the new group.
+//
+// The group is recorded only once the handshake has completed and the server
+// is authenticated. The session |SSL_get_session| returns after a failed
+// handshake has none. Sessions from tickets carry the group, and so does the
+// session |SSL_get_session| returns after a successful handshake, which in
+// TLS 1.3 is not resumable. The client uses the group from either kind, so
+// servers that issue no tickets also teach the client a group. A session that
+// is not resumable changes only the key share, never resumption.
+//
+// The supported_groups extension is unchanged, so the server may still pick
+// any group the client supports. The learned group is ignored if it is no
+// longer one of the client's supported groups, if the session has expired, and
+// when the client offers ECH, since the key share would be sent unencrypted.
+// It takes precedence over |SSL_set1_client_key_shares|.
+//
+// A predicted key share differs from the default ones, so connections that
+// use the same session can be linked by it, even when the session is not
+// resumable. Applications that do not want such connections linked should
+// not give them a session.
+//
+// A session that carries a learned group cannot be parsed by versions of
+// AWS-LC without key share learning; |SSL_SESSION_from_bytes| fails on it.
+
+// SSL_CTX_set_enable_key_share_learning configures whether clients created
+// from |ctx| use key share learning. It is disabled by default.
+OPENSSL_EXPORT void SSL_CTX_set_enable_key_share_learning(SSL_CTX *ctx,
+                                                          int enabled);
+
+// SSL_set_enable_key_share_learning configures whether |ssl|, as a client,
+// uses key share learning. It is disabled by default.
+OPENSSL_EXPORT void SSL_set_enable_key_share_learning(SSL *ssl, int enabled);
+
+// SSL_SESSION_get_learned_group_id returns the group a client learned from
+// the handshake that established |session|, as an |SSL_GROUP_*| value, or zero
+// if it learned none. It is zero for a session from a handshake that did not
+// complete.
+OPENSSL_EXPORT uint16_t
+SSL_SESSION_get_learned_group_id(const SSL_SESSION *session);
+
+
 // Certificate verification.
 //
 // SSL may authenticate either endpoint with an X.509 certificate. Typically

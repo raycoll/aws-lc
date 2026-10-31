@@ -123,6 +123,7 @@ UniquePtr<SSL_SESSION> SSL_SESSION_dup(SSL_SESSION *session, int dup_flags) {
                    session->session_id_length);
 
     new_session->group_id = session->group_id;
+    new_session->learned_group_id = session->learned_group_id;
 
     OPENSSL_memcpy(new_session->original_handshake_hash,
                    session->original_handshake_hash,
@@ -1006,6 +1007,10 @@ int SSL_SESSION_set_ticket(SSL_SESSION *session, const uint8_t *ticket,
 
 uint32_t SSL_SESSION_get_ticket_lifetime_hint(const SSL_SESSION *session) {
   return session->ticket_lifetime_hint;
+}
+
+uint16_t SSL_SESSION_get_learned_group_id(const SSL_SESSION *session) {
+  return session->learned_group_id;
 }
 
 const SSL_CIPHER *SSL_SESSION_get0_cipher(const SSL_SESSION *session) {

@@ -430,6 +430,7 @@ ssl_ctx_st::ssl_ctx_st(const SSL_METHOD *ssl_method)
       channel_id_enabled(false),
       grease_enabled(false),
       permute_extensions(false),
+      key_share_learning_enabled(false),
       allow_unknown_alpn_protos(false),
       false_start_allowed_without_alpn(false),
       handoff(false),
@@ -594,6 +595,7 @@ SSL *SSL_new(SSL_CTX *ctx) {
   ssl->config->retain_only_sha256_of_client_certs =
       ctx->retain_only_sha256_of_client_certs;
   ssl->config->permute_extensions = ctx->permute_extensions;
+  ssl->config->key_share_learning_enabled = ctx->key_share_learning_enabled;
   ssl->config->aes_hw_override = ctx->aes_hw_override;
   ssl->config->aes_hw_override_value = ctx->aes_hw_override_value;
 
@@ -659,6 +661,7 @@ SSL_CONFIG::SSL_CONFIG(SSL *ssl_arg)
       jdk11_workaround(false),
       quic_use_legacy_codepoint(false),
       permute_extensions(false),
+      key_share_learning_enabled(false),
       conf_max_version_use_default(true),
       conf_min_version_use_default(true),
       alps_use_new_codepoint(false),
@@ -3502,6 +3505,17 @@ void SSL_set_permute_extensions(SSL *ssl, int enabled) {
     return;
   }
   ssl->config->permute_extensions = !!enabled;
+}
+
+void SSL_CTX_set_enable_key_share_learning(SSL_CTX *ctx, int enabled) {
+  ctx->key_share_learning_enabled = !!enabled;
+}
+
+void SSL_set_enable_key_share_learning(SSL *ssl, int enabled) {
+  if (!ssl->config) {
+    return;
+  }
+  ssl->config->key_share_learning_enabled = !!enabled;
 }
 
 int32_t SSL_get_ticket_age_skew(const SSL *ssl) {

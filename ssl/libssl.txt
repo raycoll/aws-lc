@@ -163,6 +163,7 @@ SSL_CTX_set_default_verify_paths AWS_LC_1.0 PUBLIC
 SSL_CTX_set_dh_auto AWS_LC_1.0 PUBLIC
 SSL_CTX_set_dos_protection_cb AWS_LC_1.0 PUBLIC
 SSL_CTX_set_early_data_enabled AWS_LC_1.0 PUBLIC
+SSL_CTX_set_enable_key_share_learning AWS_LC_1.0 PUBLIC
 SSL_CTX_set_ex_data AWS_LC_1.0 PUBLIC
 SSL_CTX_set_false_start_allowed_without_alpn AWS_LC_1.0 PUBLIC
 SSL_CTX_set_grease_enabled AWS_LC_1.0 PUBLIC
@@ -254,6 +255,7 @@ SSL_SESSION_get0_ticket AWS_LC_1.0 PUBLIC
 SSL_SESSION_get_ex_data AWS_LC_1.0 PUBLIC
 SSL_SESSION_get_ex_new_index AWS_LC_1.0 PUBLIC
 SSL_SESSION_get_id AWS_LC_1.0 PUBLIC
+SSL_SESSION_get_learned_group_id AWS_LC_1.0 PUBLIC
 SSL_SESSION_get_master_key AWS_LC_1.0 PUBLIC
 SSL_SESSION_get_protocol_version AWS_LC_1.0 PUBLIC
 SSL_SESSION_get_ticket_lifetime_hint AWS_LC_1.0 PUBLIC
@@ -510,6 +512,7 @@ SSL_set_custom_verify AWS_LC_1.0 PUBLIC
 SSL_set_default_read_buffer_len AWS_LC_1.0 PUBLIC
 SSL_set_early_data_enabled AWS_LC_1.0 PUBLIC
 SSL_set_enable_ech_grease AWS_LC_1.0 PUBLIC
+SSL_set_enable_key_share_learning AWS_LC_1.0 PUBLIC
 SSL_set_enforce_rsa_key_usage AWS_LC_1.0 PUBLIC
 SSL_set_ex_data AWS_LC_1.0 PUBLIC
 SSL_set_fd AWS_LC_1.0 PUBLIC

@@ -2039,6 +2039,11 @@ struct SSL_HANDSHAKE {
   // members of this vector must be non-null.
   InplaceVector<UniquePtr<SSLKeyShare>, kNumNamedGroups> key_shares;
 
+  // learned_group_id, for a client, is the group read from the offered
+  // session's |learned_group_id| before the session is checked for
+  // resumption, or zero if key share learning does not apply.
+  uint16_t learned_group_id = 0;
+
   // transcript is the current handshake transcript.
   SSLTranscript transcript;
 
@@ -2354,6 +2359,9 @@ bool ssl_setup_extension_permutation(SSL_HANDSHAKE *hs);
 //
 // - If |override_group_id| is non-zero, it offers a single key share of the
 //   specified group.
+//
+// - If key share learning is enabled and the client was given a session that
+//   learned a group, it offers a single key share of that group.
 //
 // - If key shares were previously specified by the caller via
 //   |SSL_set1_client_key_shares|, those are used.
@@ -3439,6 +3447,11 @@ struct SSL_CONFIG {
   // permute_extensions is whether to permute extensions when sending messages.
   bool permute_extensions : 1;
 
+  // key_share_learning_enabled, for a client, is whether to record the
+  // negotiated group in the session and predict the key share from the session
+  // it is given. See |SSL_set_enable_key_share_learning|.
+  bool key_share_learning_enabled : 1;
+
   // aes_hw_override if set indicates we should override checking for aes
   // hardware support, and use the value in aes_hw_override_value instead.
   bool aes_hw_override : 1;
@@ -3673,6 +3686,14 @@ OPENSSL_EXPORT Span<const uint16_t> tls1_get_default_grouplist(void);
 
 // tls1_get_grouplist returns the locally-configured group preference list.
 Span<const uint16_t> tls1_get_grouplist(const SSL_HANDSHAKE *ssl);
+
+// ssl_get_learned_key_share_group returns the group to predict from the
+// session the client was given, or zero if key share learning does not apply.
+// It reads |SSL_SESSION::learned_group_id|, which only a completed handshake
+// sets, and ignores sessions that are expired, not TLS 1.3, from a server, or
+// from the other of QUIC and TLS over TCP, groups no longer in the client's
+// list, and connections that offer ECH.
+uint16_t ssl_get_learned_key_share_group(const SSL_HANDSHAKE *hs);
 
 // tls1_check_group_id returns whether |group_id| is consistent with locally-
 // configured group preferences.
@@ -4284,6 +4305,10 @@ struct ssl_ctx_st : public bssl::RefCounted<ssl_ctx_st> {
   // permute_extensions is whether to permute extensions when sending messages.
   bool permute_extensions : 1;
 
+  // key_share_learning_enabled is the default for |SSL_CONFIG|'s field of the
+  // same name.
+  bool key_share_learning_enabled : 1;
+
   // allow_unknown_alpn_protos is whether the client allows unsolicited ALPN
   // protocols from the peer.
   bool allow_unknown_alpn_protos : 1;
@@ -4466,6 +4491,14 @@ struct ssl_session_st : public bssl::RefCounted<ssl_session_st> {
   // group_id is the ID of the ECDH group used to establish this session or zero
   // if not applicable or unknown.
   uint16_t group_id = 0;
+
+  // learned_group_id, for a client with key share learning enabled, is the
+  // group that established this TLS 1.3 session, or zero. Unlike |group_id|,
+  // which is set when the ServerHello is processed, it is set only once the
+  // handshake has completed and the server is authenticated, so it is zero in
+  // the session left by a failed handshake. See
+  // |SSL_set_enable_key_share_learning|.
+  uint16_t learned_group_id = 0;
 
   // peer_signature_algorithm is the signature algorithm used to authenticate
   // the peer, or zero if not applicable or unknown.

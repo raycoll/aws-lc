@@ -170,6 +170,7 @@ AWS_LC_1.0 {
     SSL_CTX_set_dh_auto;
     SSL_CTX_set_dos_protection_cb;
     SSL_CTX_set_early_data_enabled;
+    SSL_CTX_set_enable_key_share_learning;
     SSL_CTX_set_ex_data;
     SSL_CTX_set_false_start_allowed_without_alpn;
     SSL_CTX_set_grease_enabled;
@@ -261,6 +262,7 @@ AWS_LC_1.0 {
     SSL_SESSION_get_ex_data;
     SSL_SESSION_get_ex_new_index;
     SSL_SESSION_get_id;
+    SSL_SESSION_get_learned_group_id;
     SSL_SESSION_get_master_key;
     SSL_SESSION_get_protocol_version;
     SSL_SESSION_get_ticket_lifetime_hint;
@@ -517,6 +519,7 @@ AWS_LC_1.0 {
     SSL_set_default_read_buffer_len;
     SSL_set_early_data_enabled;
     SSL_set_enable_ech_grease;
+    SSL_set_enable_key_share_learning;
     SSL_set_enforce_rsa_key_usage;
     SSL_set_ex_data;
     SSL_set_fd;

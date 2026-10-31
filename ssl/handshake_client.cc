@@ -353,6 +353,10 @@ static enum ssl_hs_wait_t do_start_connect(SSL_HANDSHAKE *hs) {
         hs->max_version >= TLS1_2_VERSION ? TLS1_2_VERSION : hs->max_version;
   }
 
+  // Read the learned group before the session is checked for resumption, so
+  // that a session from a server that issues no tickets still predicts.
+  hs->learned_group_id = ssl_get_learned_key_share_group(hs);
+
   // If the configured session has expired or is not usable, drop it. We also do
   // not offer sessions on renegotiation.
   if (ssl->session != nullptr) {
@@ -1735,6 +1739,15 @@ static enum ssl_hs_wait_t do_finish_client_handshake(SSL_HANDSHAKE *hs) {
     // Renegotiations do not participate in session resumption.
     if (!ssl->s3->initial_handshake_complete) {
       ssl->s3->established_session->not_resumable = false;
+    }
+    // The handshake has completed and authenticated the server, so the group
+    // it negotiated can now be learned. The partial session from a failed
+    // handshake never gets here, so its |learned_group_id| stays zero.
+    // Tickets copy this session, so they carry the learned group too.
+    if (hs->config->key_share_learning_enabled &&
+        ssl_protocol_version(ssl) >= TLS1_3_VERSION) {
+      ssl->s3->established_session->learned_group_id =
+          ssl->s3->established_session->group_id;
     }
 
     hs->new_session.reset();

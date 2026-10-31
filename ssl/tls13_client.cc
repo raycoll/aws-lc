@@ -1055,6 +1055,11 @@ bool tls13_process_new_session_ticket(SSL *ssl, const SSLMessage &msg) {
 }
 
 UniquePtr<SSL_SESSION> tls13_create_session_with_ticket(SSL *ssl, CBS *body) {
+  // A ticket is only processed after the handshake completed. The session
+  // made from it copies |established_session|, including its
+  // |learned_group_id|, which key share learning relies on being set only by
+  // a completed handshake.
+  assert(ssl->s3->established_session != nullptr);
   UniquePtr<SSL_SESSION> session = SSL_SESSION_dup(
       ssl->s3->established_session.get(), SSL_SESSION_INCLUDE_NONAUTH);
   if (!session) {

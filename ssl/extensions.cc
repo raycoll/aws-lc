@@ -2171,6 +2171,36 @@ static bool ext_early_data_add_serverhello(SSL_HANDSHAKE *hs, CBB *out) {
 //
 // https://tools.ietf.org/html/rfc8446#section-4.2.8
 
+uint16_t ssl_get_learned_key_share_group(const SSL_HANDSHAKE *hs) {
+  const SSL *const ssl = hs->ssl;
+  const SSL_SESSION *session = ssl->session.get();
+  if (ssl->server || !hs->config->key_share_learning_enabled ||
+      ssl->s3->initial_handshake_complete || session == nullptr ||
+      // These match the checks |do_start_connect| makes before offering a
+      // session, which runs after this.
+      session->is_server || (ssl->quic_method != nullptr) != session->is_quic ||
+      ssl_session_protocol_version(session) < TLS1_3_VERSION ||
+      !ssl_session_is_time_valid(ssl, session) ||
+      // Under ECH the key_share is sent in the clear in ClientHelloOuter, and
+      // a learned group would describe the server behind the public name.
+      hs->selected_ech_config != nullptr) {
+    return 0;
+  }
+
+  // Only |learned_group_id| is used, never |group_id|, which a failed
+  // handshake leaves set from an unauthenticated ServerHello.
+  const uint16_t group_id = session->learned_group_id;
+  if (group_id == 0) {
+    return 0;
+  }
+  for (uint16_t supported : tls1_get_grouplist(hs)) {
+    if (supported == group_id) {
+      return group_id;
+    }
+  }
+  return 0;
+}
+
 bool ssl_setup_key_shares(SSL_HANDSHAKE *hs, uint16_t override_group_id) {
   SSL *const ssl = hs->ssl;
   hs->key_shares.clear();
@@ -2195,6 +2225,8 @@ bool ssl_setup_key_shares(SSL_HANDSHAKE *hs, uint16_t override_group_id) {
     assert(std::find(supported_group_list.begin(), supported_group_list.end(),
                      override_group_id) != supported_group_list.end());
     selected_key_shares = MakeConstSpan(&override_group_id, 1u);
+  } else if (hs->learned_group_id != 0) {
+    selected_key_shares = MakeConstSpan(&hs->learned_group_id, 1u);
   } else if (hs->config->has_client_key_share_selections) {
     selected_key_shares =
         MakeConstSpan(hs->config->client_key_share_selections.data(),

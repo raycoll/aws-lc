@@ -63,6 +63,8 @@ BSSL_NAMESPACE_BEGIN
 //     peerALPS                [30] OCTET STRING OPTIONAL,
 //     -- Either both or none of localALPS and peerALPS must be present. If both
 //     -- are present, earlyALPN must be present and non-empty.
+//     -- AWS-LC-only fields use tags from 64 up.
+//     learnedGroupID          [64] INTEGER OPTIONAL,
 // }
 //
 // Note: historically this serialization has included other optional
@@ -130,6 +132,10 @@ static const CBS_ASN1_TAG kLocalALPSTag =
     CBS_ASN1_CONSTRUCTED | CBS_ASN1_CONTEXT_SPECIFIC | 29;
 static const CBS_ASN1_TAG kPeerALPSTag =
     CBS_ASN1_CONSTRUCTED | CBS_ASN1_CONTEXT_SPECIFIC | 30;
+// Fields that exist only in AWS-LC use tags from 64 up, so they do not collide
+// with the tags BoringSSL assigns from 31 up.
+static const CBS_ASN1_TAG kLearnedGroupIDTag =
+    CBS_ASN1_CONSTRUCTED | CBS_ASN1_CONTEXT_SPECIFIC | 64;
 
 static int SSL_SESSION_to_bytes_full(const SSL_SESSION *in, CBB *cbb,
                                      int for_ticket) {
@@ -333,6 +339,12 @@ static int SSL_SESSION_to_bytes_full(const SSL_SESSION *in, CBB *cbb,
                                    in->peer_application_settings.size())) {
       return 0;
     }
+  }
+
+  if (in->learned_group_id > 0 &&
+      (!CBB_add_asn1(&session, &child, kLearnedGroupIDTag) ||
+       !CBB_add_asn1_uint64(&child, in->learned_group_id))) {
+    return 0;
   }
 
   return CBB_flush(cbb);
@@ -696,6 +708,8 @@ UniquePtr<SSL_SESSION> SSL_SESSION_parse(CBS *cbs,
       !CBS_get_optional_asn1_octet_string(&session, &settings, &has_peer_alps,
                                           kPeerALPSTag) ||
       !ret->peer_application_settings.CopyFrom(settings) ||
+      !SSL_SESSION_parse_u16(&session, &ret->learned_group_id,
+                             kLearnedGroupIDTag, 0) ||
       CBS_len(&session) != 0) {
     OPENSSL_PUT_ERROR(SSL, SSL_R_INVALID_SSL_SESSION);
     return nullptr;
