@@ -479,6 +479,38 @@ TEST(KeyShareLearningTest, StaleGroupRelearned) {
   EXPECT_EQ(relearned.group, SSL_GROUP_SECP384R1);
 }
 
+// TLS 1.2 teaches nothing: its sessions record the ECDHE group but no learned
+// group, and a learned group on a TLS 1.2 session is ignored.
+TEST(KeyShareLearningTest, TLS12SessionNoLearning) {
+  UniquePtr<SSL_CTX> client_ctx = NewClientContext();
+  UniquePtr<SSL_CTX> tls12_server =
+      CreateContextWithTestCertificate(TLS_method());
+  ASSERT_TRUE(client_ctx);
+  ASSERT_TRUE(tls12_server);
+  const uint16_t kP256 = SSL_GROUP_SECP256R1;
+  ASSERT_TRUE(
+      SSL_CTX_set_max_proto_version(tls12_server.get(), TLS1_2_VERSION));
+  ASSERT_TRUE(SSL_CTX_set1_group_ids(tls12_server.get(), &kP256, 1));
+  SSL_CTX_set_select_certificate_cb(tls12_server.get(), RecordClientHello);
+  Connection cold;
+  ASSERT_TRUE(Connect(&cold, client_ctx.get(), tls12_server.get()));
+  ASSERT_TRUE(cold.ticket);
+  ASSERT_EQ(SSL_SESSION_get_protocol_version(cold.ticket.get()),
+            TLS1_2_VERSION);
+  EXPECT_EQ(cold.ticket->group_id, SSL_GROUP_SECP256R1);
+  EXPECT_EQ(SSL_SESSION_get_learned_group_id(cold.ticket.get()), 0);
+
+  // A session from elsewhere might carry one anyway.
+  cold.ticket->learned_group_id = SSL_GROUP_SECP256R1;
+  UniquePtr<SSL_CTX> tls13_server = NewServerContext({SSL_GROUP_SECP256R1});
+  ASSERT_TRUE(tls13_server);
+  ConnectOptions opts;
+  opts.session = cold.ticket.get();
+  Connection next;
+  ASSERT_TRUE(Connect(&next, client_ctx.get(), tls13_server.get(), opts));
+  EXPECT_EQ(next.first_key_shares, kDefaultShares);
+}
+
 }  // namespace
 
 BSSL_NAMESPACE_END
