@@ -415,6 +415,40 @@ TEST(KeyShareLearningTest, ExpiredSessionNoLearning) {
   }
 }
 
+// Resumption never changes the session the application offered, which may be
+// shared with other connections. When a resumed handshake negotiates a new
+// group, the sessions from it carry the new group instead.
+TEST(KeyShareLearningTest, ResumptionLeavesOfferedSessionAlone) {
+  UniquePtr<SSL_CTX> client_ctx = NewClientContext();
+  UniquePtr<SSL_CTX> server_ctx = NewServerContext({SSL_GROUP_SECP256R1});
+  ASSERT_TRUE(client_ctx);
+  ASSERT_TRUE(server_ctx);
+  Connection cold;
+  ASSERT_TRUE(Connect(&cold, client_ctx.get(), server_ctx.get()));
+  ASSERT_TRUE(cold.ticket);
+
+  // The same server, now supporting only P-384, still resumes the ticket.
+  const uint16_t kP384 = SSL_GROUP_SECP384R1;
+  ASSERT_TRUE(SSL_CTX_set1_group_ids(server_ctx.get(), &kP384, 1));
+  ConnectOptions opts;
+  opts.session = cold.ticket.get();
+  Connection resumed;
+  ASSERT_TRUE(Connect(&resumed, client_ctx.get(), server_ctx.get(), opts));
+  EXPECT_TRUE(resumed.reused);
+  EXPECT_EQ(resumed.first_key_shares, kP256Share);
+  EXPECT_TRUE(resumed.hrr);
+  EXPECT_EQ(resumed.group, SSL_GROUP_SECP384R1);
+  EXPECT_EQ(cold.ticket->group_id, SSL_GROUP_SECP256R1);
+  EXPECT_EQ(SSL_SESSION_get_learned_group_id(cold.ticket.get()),
+            SSL_GROUP_SECP256R1);
+  ASSERT_TRUE(resumed.ticket);
+  EXPECT_EQ(SSL_SESSION_get_learned_group_id(resumed.ticket.get()),
+            SSL_GROUP_SECP384R1);
+  ASSERT_TRUE(resumed.session);
+  EXPECT_EQ(SSL_SESSION_get_learned_group_id(resumed.session.get()),
+            SSL_GROUP_SECP384R1);
+}
+
 }  // namespace
 
 BSSL_NAMESPACE_END
