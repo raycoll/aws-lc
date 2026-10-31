@@ -574,6 +574,36 @@ TEST(KeyShareLearningTest, LearnedGroupOverridesConfiguredKeyShares) {
   }
 }
 
+// A session from a server, or from the other of QUIC and TLS over TCP, is
+// never offered for resumption, and its learned group is ignored too.
+TEST(KeyShareLearningTest, SessionFromOtherContextIgnored) {
+  UniquePtr<SSL_CTX> client_ctx = NewClientContext();
+  UniquePtr<SSL_CTX> server_ctx = NewServerContext({SSL_GROUP_SECP256R1});
+  ASSERT_TRUE(client_ctx);
+  ASSERT_TRUE(server_ctx);
+  Connection cold;
+  ASSERT_TRUE(Connect(&cold, client_ctx.get(), server_ctx.get()));
+  ASSERT_TRUE(cold.ticket);
+
+  UniquePtr<SSL_SESSION> from_server =
+      RoundTrip(cold.ticket.get(), client_ctx.get());
+  UniquePtr<SSL_SESSION> from_quic =
+      RoundTrip(cold.ticket.get(), client_ctx.get());
+  ASSERT_TRUE(from_server);
+  ASSERT_TRUE(from_quic);
+  from_server->is_server = true;
+  from_quic->is_quic = true;
+  for (SSL_SESSION *session : {from_server.get(), from_quic.get()}) {
+    SCOPED_TRACE(session == from_server.get() ? "server" : "QUIC");
+    ConnectOptions opts;
+    opts.session = session;
+    Connection warm;
+    ASSERT_TRUE(Connect(&warm, client_ctx.get(), server_ctx.get(), opts));
+    EXPECT_FALSE(warm.reused);
+    EXPECT_EQ(warm.first_key_shares, kDefaultShares);
+  }
+}
+
 }  // namespace
 
 BSSL_NAMESPACE_END
