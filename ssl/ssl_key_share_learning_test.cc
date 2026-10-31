@@ -511,6 +511,45 @@ TEST(KeyShareLearningTest, TLS12SessionNoLearning) {
   EXPECT_EQ(next.first_key_shares, kDefaultShares);
 }
 
+// Under ECH the key_share is sent unencrypted in ClientHelloOuter, so a
+// learned group would describe the server behind the public name. The client
+// sends its default key shares instead.
+TEST(KeyShareLearningTest, NoLearningUnderECH) {
+  UniquePtr<SSL_CTX> client_ctx = NewClientContext();
+  UniquePtr<SSL_CTX> server_ctx = NewServerContext({SSL_GROUP_SECP256R1});
+  ASSERT_TRUE(client_ctx);
+  ASSERT_TRUE(server_ctx);
+  Connection cold;
+  ASSERT_TRUE(Connect(&cold, client_ctx.get(), server_ctx.get()));
+  ASSERT_TRUE(cold.ticket);
+
+  ScopedEVP_HPKE_KEY key;
+  ASSERT_TRUE(EVP_HPKE_KEY_generate(key.get(), EVP_hpke_x25519_hkdf_sha256()));
+  uint8_t *ech_config = nullptr;
+  size_t ech_config_len = 0;
+  ASSERT_TRUE(SSL_marshal_ech_config(&ech_config, &ech_config_len,
+                                     /*config_id=*/1, key.get(),
+                                     "public.example", 16));
+  UniquePtr<uint8_t> free_ech_config(ech_config);
+  UniquePtr<SSL_ECH_KEYS> keys(SSL_ECH_KEYS_new());
+  ASSERT_TRUE(keys);
+  ASSERT_TRUE(SSL_ECH_KEYS_add(keys.get(), /*is_retry_config=*/1, ech_config,
+                               ech_config_len, key.get()));
+  ASSERT_TRUE(SSL_CTX_set1_ech_keys(server_ctx.get(), keys.get()));
+  uint8_t *list = nullptr;
+  size_t list_len = 0;
+  ASSERT_TRUE(SSL_ECH_KEYS_marshal_retry_configs(keys.get(), &list, &list_len));
+  UniquePtr<uint8_t> free_list(list);
+
+  ConnectOptions opts;
+  opts.session = cold.ticket.get();
+  opts.ech_config_list.assign(list, list + list_len);
+  Connection warm;
+  ASSERT_TRUE(Connect(&warm, client_ctx.get(), server_ctx.get(), opts));
+  EXPECT_TRUE(SSL_ech_accepted(warm.client.get()));
+  EXPECT_EQ(warm.first_key_shares, kDefaultShares);
+}
+
 }  // namespace
 
 BSSL_NAMESPACE_END
